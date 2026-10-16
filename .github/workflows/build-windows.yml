@@ -1,0 +1,65 @@
+name: Compilar Enhanced-Freecam Story Mode
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Obtener fuente original
+        shell: pwsh
+        run: |
+          git clone --recursive https://github.com/Meos4/Enhanced-Freecam.git source
+          cd source
+          git fetch --tags
+          if (git rev-parse -q --verify "refs/tags/1.4.0") { git checkout 1.4.0 }
+          elseif (git rev-parse -q --verify "refs/tags/v1.4.0") { git checkout v1.4.0 }
+          else { throw "No se encontro la etiqueta 1.4.0 del proyecto original" }
+      - name: Agregar exportador Story Mode
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          p=Path("source/src/Games/PS2/DBZTenkaichi3/Loop.cpp")
+          s=p.read_text(encoding="utf-8")
+          anchor='CameraModel::drawRotation(&m_rotation, !m_isEnabled);'
+          assert s.count(anchor)==1, "No se encontro punto de insercion unico"
+          code=r'''
+                  ImGui::SeparatorText("Story Mode - Copy coordinates");
+                  char storyModeText[256];
+                  std::snprintf(storyModeText, sizeof(storyModeText),
+                      "F[%.6f %.6f %.6f] $rot:F[%.6f %.6f %.6f]}",
+                      m_position.x, m_position.y, m_position.z,
+                      m_rotation.x, m_rotation.y, m_rotation.z);
+                  ImGui::PushItemWidth(-1.0f);
+                  ImGui::InputText("##StoryModeCoordinates", storyModeText,
+                      sizeof(storyModeText), ImGuiInputTextFlags_ReadOnly);
+                  ImGui::PopItemWidth();
+                  if (ImGui::Button("Copy Story Mode Format"))
+                      ImGui::SetClipboardText(storyModeText);
+          '''
+          s=s.replace(anchor,anchor+'\n'+code)
+          s=s.replace('#include <cmath>', '#include <cmath>\n#include <cstdio>')
+          p.write_text(s,encoding="utf-8")
+          '@ | python -
+      - name: Instalar SDL2
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install sdl2:x64-windows
+      - name: Configurar y compilar
+        shell: pwsh
+        run: |
+          cmake -S source -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          cmake --build build --config Release --parallel 2
+      - name: Preparar descarga
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force output | Out-Null
+          Copy-Item build/Release/Enhanced-Freecam.exe output/
+          $dll=Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin" -Filter SDL2.dll -Recurse | Select-Object -First 1
+          if ($dll) { Copy-Item $dll.FullName output/ }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Enhanced-Freecam-StoryMode-Windows
+          path: output/*
