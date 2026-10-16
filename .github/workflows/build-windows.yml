@@ -31,7 +31,7 @@ jobs:
                   std::snprintf(storyModeText, sizeof(storyModeText),
                       "F[%.6f %.6f %.6f] $rot:F[%.6f %.6f %.6f]}",
                       m_position.x, m_position.y, m_position.z,
-                      m_rotation.x, m_rotation.y, m_rotation.z);
+                      m_rotation.x * 57.29577951308232f,\n                      m_rotation.y * 57.29577951308232f,\n                      m_rotation.z * 57.29577951308232f);
                   ImGui::PushItemWidth(-1.0f);
                   ImGui::InputText("##StoryModeCoordinates", storyModeText,
                       sizeof(storyModeText), ImGuiInputTextFlags_ReadOnly);
@@ -68,7 +68,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force output | Out-Null
-          Copy-Item build/Release/Enhanced-Freecam.exe output/
+          $exe=Get-ChildItem build -Recurse -Filter Enhanced-Freecam.exe | Where-Object { $_.FullName -match "Release" } | Select-Object -First 1\n          if (-not $exe) { throw "No se genero Enhanced-Freecam.exe" }\n          Copy-Item $exe.FullName output/
           $dll=Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin" -Filter SDL2.dll -Recurse | Select-Object -First 1
           if ($dll) { Copy-Item $dll.FullName output/ }
       - uses: actions/upload-artifact@v4
